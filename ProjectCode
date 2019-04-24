@@ -1,0 +1,6 @@
+#Analyzing data being read in from a file.
+---
+output:
+  pdf_document: default
+  html_document: default
+---
