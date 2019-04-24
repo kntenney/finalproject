@@ -1,30 +1,279 @@
 ---
-title: "Untitled"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
+We can use the `cor()` function to look at the pairwise correlations between different predictors, ommitting consideration of the qualitative classifiers. 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r}
+cor(df[,-(4:5)])
+```
+From this we see that `filament_index` and `comp` are very weakly correlated, while the former is strongly correlated to `area_density`. `comp`, on the other hand, is only weakly correlated to the `area_density` predictor. 
+
+We first use logistic regression to fit the data. To begin, we see how good the predictors are in discerning between cancerous and normal breasts. To do this, we use the `glm()` function as follows:
+
+```{r}
+# predict class2 using predictors
+glm_fit <- glm(class2 ~ filament_index + comp + area_density, data = df,
+               family = binomial)
+# looking at a summary of the model...
+summary(glm_fit)
+```
+As one can see, all the parameters are statistically significant given their p-values. The most sensitive predictor is `filament_index`, as a one unit increase in `filament_index` increases the log odds of having cancer by $1.575$. 
+
+We can also look at the confidence intervals to determine where the parameters may reside. 
+
+```{r}
+confint(glm_fit)
 ```
 
-## R Markdown
+To look at the particular coefficients of the data, we can use the `coef()` function.
 
-DUMMY FILE
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+coef(glm_fit)
 ```
 
-## Including Plots
+And now we want to see how well it predicts whether or not a breast has cancer. Since we are currently only using the training data, this will have to suffice for our predictions. Here, a prediction of `1` is cancerous while a prediction of `0` is normal. After computing the probabilities, we set all those greater than $0.5$ to $1$. 
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+cancer_probs <- predict(glm_fit, type="response")
+cancer_probs[which(cancer_probs > 0.5)] = 1
+cancer_probs[which(cancer_probs < 1)] = 0
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+To look at how the model performed, we can use the `table()` function to generate a confusion matrix. 
+
+```{r}
+table(cancer_probs, class2)
+```
+
+We can calculate the associated accuracy of the model, as well as its sensitivity and specificity.
+
+```{r}
+# the accuracy of the model...
+(36+66)/153
+# an accuracy of 67%, or an error rate of 23%
+
+# the sensitivty of the model (positively identified cancer patients)
+66/(66+19)
+# a sensitivity of 78%
+
+# the specificity of the model (positively identified cancer-free patients)
+36/(36+32)
+# a specificity of 53%
+```
+
+How do higher powers of the logistic regression variables fair when fitting the model? We check for the case of quadratic and cubic terms.
+
+```{r}
+# the quadratic case
+glm_fit_quad <- glm(class2 ~ poly(filament_index,2) + poly(comp,2) + 
+                 poly(area_density,2), data = df, family = binomial)
+# and now to make predictions
+cancer_probs_quad <- predict(glm_fit_quad, type="response")
+cancer_probs_quad[which(cancer_probs_quad > 0.5)] = 1
+cancer_probs_quad[which(cancer_probs_quad < 1)] = 0
+table(cancer_probs_quad, class2)
+
+# and for the cubic case
+glm_fit_cube <- glm(class2 ~ poly(filament_index,3) + poly(comp,3) + 
+                 poly(area_density,3), data = df, family = binomial)
+# and now to make predictions
+cancer_probs_cube <- predict(glm_fit_cube, type="response")
+cancer_probs_cube[which(cancer_probs_cube > 0.5)] = 1
+cancer_probs_cube[which(cancer_probs_cube < 1)] = 0
+table(cancer_probs_cube, class2)
+
+```
+
+The quadratic case seemed to improve in the positive identification of those with cancer, while the cubic case seemed to improve the positive identification of those without cancer. 
+
+However, thus far we have only considered the training
+
+
+```{r}
+library(MASS)
+library(tidyverse)
+library(ISLR)
+head(Smarket)
+```
+
+# Logistic Regression
+
+```{r}
+glm_fit <- glm(Direction ~ Lag1 + Lag2,
+    data = Smarket,
+    family = binomial
+)
+glm_fit
+```
+
+```{r}
+library(modelr)
+new_data <- read_csv("Lag1, Lag2
+                      0.5, 0.3
+                      0.4, 0.3")
+new_data %>% add_predictions(glm_fit) %>% mutate(prob = exp(pred)/ (1 + exp(pred)))
+```
+
+# ROC curve
+
+```{r}
+Smarket2 <- Smarket %>% 
+    add_predictions(glm_fit) %>% 
+    mutate(prob = exp(pred)/ (1 + exp(pred)), EstDir = ifelse(prob > 0.5, "Up", "Down"))
+Smarket2 %>% count(Direction, EstDir) %>% spread(Direction, n)
+```
+
+```{r}
+library(tidymodels)
+autoplot(roc_curve(Smarket2, Direction, prob))
+roc_auc(Smarket2, Direction, prob)
+```
+
+# Multinomial logistic
+
+
+variable name |  type |  about the variable 
+--------------|--------|-------------------------------------------------------
+id          |    scale|  student id                  
+female      |  nominal|  (0/1)        
+race        |  nominal|  ethnicity (1=hispanic 2=asian 3=african-amer 4=white)        
+ses         |  ordinal|  socio economic status (1=low 2=middle 3=high)           
+schtyp      |  nominal|  type of school (1=public 2=private)
+prog        |  nominal|  type of program (1=general 2=academic 3=vocational)
+read        |    scale|  standardized reading score
+write       |    scale|  standardized writing score
+math        |    scale|  standardized math score
+science     |    scale|  standardized science score
+socst       |    scale|  standardized social studies score
+hon         |  nominal|  honors english (0/1)
+
+```{r}
+ml <- read_csv("hsb2.csv")
+```
+
+```{r}
+hsb2 <- ml %>% mutate(
+    prog = recode_factor(prog, `1` = "general", `2` = "academic", `3` = "vocational"),
+    ses = recode_factor(ses, `1` = "low", `2` = "middle", `3` = "high"))
+```
+
+```{r}
+hsb2 %>% count(prog, ses)  %>% spread(prog, n)
+```
+
+```{r}
+hsb2 %>% group_by(prog) %>% summarize(mwrite = mean(write))
+```
+
+```{r}
+library(nnet)
+multi_fit <- multinom(prog ~ ses + write, data = hsb2)
+```
+
+```{r}
+new_data <- tibble(ses = "middle", write = 56)
+predict(multi_fit, new_data, type = "probs")
+
+
+# tidyverse
+new_data %>% add_predictions(multi_fit)
+```
+
+```{r}
+predict(multi_fit, new_data)
+
+# a few month later
+# new_data %>% add_predictions(multi_fit, type = "probs")
+```
+
+# LDA
+```{r}
+lda_fit <- lda(Direction ~ Lag1 + Lag2, data = Smarket)
+```
+
+```{r}
+Smarket3 <- Smarket %>% mutate(EstDir = predict(lda_fit, newdata = Smarket)$class)
+Smarket3 %>% count(Direction, EstDir) %>% spread(Direction, n)
+```
+
+
+```{r}
+new_data <- read_csv("Lag1, Lag2
+                      0.5, 0.3
+                      0.4, 0.3")
+
+predict(lda_fit, new_data)
+
+# modelr magic doesn't work now
+# new_data %>% add_predictions(lda_fit)
+```
+
+## An exmple with more than one class
+
+```{r}
+head(iris)
+```
+
+```{r}
+iris_fit <- lda(Species ~ .,  data = iris)
+```
+
+```{r}
+new_data <-  tibble(Sepal.Length = 5.906, Sepal.Width = 2.77, Petal.Length = 3, Petal.Width = 0.246)
+predict(iris_fit, new_data)$posterior
+```
+
+```{r}
+iris2 <- iris %>% bind_cols(as_tibble(predict(iris_fit, newdata = iris)$x))
+ggplot(iris2) + geom_point(aes(LD1, LD2, color = Species))
+```
+
+# Reduced rank LDA
+
+```{r}
+# only use LD1
+predict(iris_fit, new_data, dimen = 1)
+```
+
+# Explaining kNN
+
+```{r}
+library(mvtnorm)
+g1 <- rmvnorm(30, mean=c(-0.5,0))
+g2 <- rmvnorm(20, mean=c(1,-1))
+g3 <- rmvnorm(20, mean=c(1,1))
+x <- rbind(g1, g2, g3)
+colnames(x) <- c("x1", "x2")
+x <- as_tibble(x)
+y <- rep(c("a", "b", "c"), c(30, 20, 20))
+knn_example <- bind_cols(x, y = y)
+```
+
+```{r}
+ggplot(knn_example) + geom_point(aes(x1, x2, color = y))
+```
+
+```{r}
+k = 7
+point = c(-1, 0)
+knn_neighor <- knn_example %>% 
+  mutate(dist = sqrt((x1 - point[1])^2 + (x2 - point[2])^2)) %>%
+  filter(row_number(dist) <= k)
+ggplot(knn_example) +
+  geom_point(data = knn_neighor, aes(x1, x2), alpha = 0.5, size = 5) +
+  geom_segment(data = knn_neighor, aes(x = x1, y = x2, xend = point[1], yend = point[2], color = y)) +
+  geom_point(aes(x1, x2, color = y)) +
+  annotate("point", x = point[1], y = point[2])
+```
+
+
+```{r}
+library(class)
+new_data <- read_csv("x1, x2
+                      0.2, 1
+                      0.6, -1")
+new_data %>% mutate(est_class = knn(knn_example %>% select(x1, x2), new_data, knn_example %>% pull(y), k = 5))
+```
+
