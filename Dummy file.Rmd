@@ -281,8 +281,8 @@ new_data %>% mutate(est_class = knn(knn_example %>% select(x1, x2), new_data, kn
 We will now fit an SVM model to the data set with differing kernels including linear and radial.
 ```{r}
 library(tidyverse)
-library(tidymodels)
-x<-read.csv("breast_cancer_data.csv")
+#library(tidymodels)
+x<-read.csv("breast_cancer_proj_dat.csv")
 library(modelr)
 set.seed(1)
 rp <- resample_partition(x, c(train = 0.7, test = 0.3))
@@ -291,47 +291,47 @@ x.train <- as.tibble(rp$train)
 x.test<- as.tibble(rp$test)
 
 library(e1071)
-(svm_linear <- svm ( class2~ ., data = x.train, kernel = "linear", cost = 10, scale = FALSE))
+(svm_linear <- svm (Class~ ., data = x.train, kernel = "linear", cost = 10, scale = FALSE))
 
 ```
 
 Now we will use the tune() function to find the best cost and gamma values for the linear kernel to give the lowest cross-validation error.
 ```{r}
 set.seed(1)
-tune_out <- tune(svm, class2 ~ ., data = x.train, kernel = "linear",
+tune_out <- tune(svm, Class ~ ., data = x.train, kernel = "linear",
                  ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 100)))
 summary(tune_out)
 bestmod <- tune_out$best.model
 summary(bestmod)
 class_pred = predict(bestmod, x.test)
-table(predict = class_pred, truth = x.test$class2)
+table(predict = class_pred, truth = x.test$Class)
 ```
 
-This linear kernel svm model used with the tune() function gave us a gamma of 0.2. The cost of 1 gave us the lowest cross-validation error. Next, we consider the same using the radial kernel and tuning the best gamma value.
+This linear kernel svm model used with the tune() function gave us a gamma of 0.08. The cost of 0.01 gave us the lowest cross-validation error. Next, we consider the same using the radial kernel and tuning the best gamma value.
 
 ```{r}
-svm_radial <- svm(class2~., data = x.train, kernel = "radial", gamma = 1, cost = 1)
+svm_radial <- svm(Class~., data = x.train, kernel = "radial", gamma = 1, cost = 1)
 
 set.seed(1)
-tune_out_r <- tune(svm, class2 ~ ., data = x.train, kernel = "radial",
+tune_out_r <- tune(svm, Class ~ ., data = x.train, kernel = "radial",
                  ranges = list(cost = c(0.1, 1, 10, 100, 1000), gamma = c(0.1, 0.5, 1, 2, 3, 4)))
 summary(tune_out_r)
 plot(tune_out_r$best.model, x)
 ```
-This gives us a gamma value of 0.1 and the cost value with the lowest cross-validation error was cost = 10. 
+This gives us a gamma value of 0.1 and the cost value with the lowest cross-validation error was cost = 1. 
 
 ```{r}
-svm_rad.opt <- svm(class2~., data = x.train, kernel = "radial", gamma = 0.1, cost = 10,decision.values=T)
-svm_lin.opt <- svm(class2~., data = x.train, kernel = "linear", gamma = 0.2, cost = 1,decision.values=T)
-summary(svm_rad.opt)
+svm_lin.opt <- svm(Class~., data = x.train, kernel = "linear", gamma = 0.0, cost = 0.01,decision.values=T)
+svm_rad.opt <- svm(Class~., data = x.train, kernel = "radial", gamma = 0.1, cost = 1,decision.values=T)
 summary(svm_lin.opt)
+summary(svm_rad.opt)
 ```
-The linear kernel optimized model gives us 74 support vectors while the similar radial kernel model gave us 35. The linear kernel gaves us a smaller cost variable. This controls bias-variance trade-off so when it's smaller, it gives us a classifier that is more highly fit to the data. This gives us a lower bias and thus the linear kernel is the better SVM procedure for this data. 
+The linear kernel optimized model gives us 99 support vectors while the similar radial kernel model gave us 75. The linear kernel gaves us a smaller cost variable. This controls bias-variance trade-off so when it's smaller, it gives us a classifier that is more highly fit to the data. This gives us a lower bias and thus the linear kernel is the better SVM procedure for this data. 
 ```{r}
 bestmod = tune_out_r$best.model
 summary(bestmod)
 plot(bestmod, x.train)
-table(true = x.test$class2, pred = predict(tune_out_r$best.model, newdata = x.test))
+table(true = x.test$Class, pred = predict(tune_out_r$best.model, newdata = x.test))
 ```
 
 
