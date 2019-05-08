@@ -303,7 +303,8 @@ tune_out <- tune(svm, class2 ~ ., data = x.train, kernel = "linear",
 summary(tune_out)
 bestmod <- tune_out$best.model
 summary(bestmod)
-
+class_pred = predict(bestmod, x.test)
+table(predict = class_pred, truth = x.test$class2)
 ```
 
 This linear kernel svm model used with the tune() function gave us a gamma of 0.2. The cost of 1 gave us the lowest cross-validation error. Next, we consider the same using the radial kernel and tuning the best gamma value.
@@ -312,10 +313,10 @@ This linear kernel svm model used with the tune() function gave us a gamma of 0.
 svm_radial <- svm(class2~., data = x.train, kernel = "radial", gamma = 1, cost = 1)
 
 set.seed(1)
-tune_out <- tune(svm, class2 ~ ., data = x.train, kernel = "radial",
+tune_out_r <- tune(svm, class2 ~ ., data = x.train, kernel = "radial",
                  ranges = list(cost = c(0.1, 1, 10, 100, 1000), gamma = c(0.1, 0.5, 1, 2, 3, 4)))
-summary(tune_out)
-plot(tune_out$best.model, x)
+summary(tune_out_r)
+plot(tune_out_r$best.model, x)
 ```
 This gives us a gamma value of 0.1 and the cost value with the lowest cross-validation error was cost = 10. 
 
@@ -326,6 +327,12 @@ summary(svm_rad.opt)
 summary(svm_lin.opt)
 ```
 The linear kernel optimized model gives us 74 support vectors while the similar radial kernel model gave us 35. The linear kernel gaves us a smaller cost variable. This controls bias-variance trade-off so when it's smaller, it gives us a classifier that is more highly fit to the data. This gives us a lower bias and thus the linear kernel is the better SVM procedure for this data. 
+```{r}
+bestmod = tune_out_r$best.model
+summary(bestmod)
+plot(bestmod, x.train)
+table(true = x.test$class2, pred = predict(tune_out_r$best.model, newdata = x.test))
+```
 
 
 
