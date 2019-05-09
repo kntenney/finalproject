@@ -333,6 +333,6 @@ summary(bestmod)
 plot(bestmod, x.train)
 table(true = x.test$Class, pred = predict(tune_out_r$best.model, newdata = x.test))
 ```
-
+The table above shows the coorelations between the predictor variable and the remaining variables using the best model gained from the tune() function on the SVM model. 
 
 
