@@ -281,7 +281,6 @@ new_data %>% mutate(est_class = knn(knn_example %>% select(x1, x2), new_data, kn
 We will now fit an SVM model to the data set with differing kernels including linear and radial.
 ```{r}
 library(tidyverse)
-#library(tidymodels)
 x<-read.csv("breast_cancer_proj_dat.csv")
 library(modelr)
 set.seed(1)
@@ -302,7 +301,6 @@ tune_out <- tune(svm, Class ~ ., data = x.train, kernel = "linear",
                  ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 100)))
 summary(tune_out)
 bestmod <- tune_out$best.model
-summary(bestmod)
 class_pred = predict(bestmod, x.test)
 table(predict = class_pred, truth = x.test$Class)
 ```
@@ -329,21 +327,9 @@ summary(svm_lin.opt)
 summary(svm_rad.opt)
 ```
 The linear kernel optimized model gives us 99 support vectors while the similar radial kernel model gave us 75. The linear kernel gaves us a smaller cost variable. This controls bias-variance trade-off so when it's smaller, it gives us a classifier that is more highly fit to the data. This gives us a lower bias and thus the linear kernel is the better SVM procedure for this data. 
-```{r}
-bestmod = tune_out_r$best.model
-summary(bestmod)
-plot(bestmod, x.train)
-table(true = x.test$Class, pred = predict(tune_out_r$best.model, newdata = x.test))
-```
-The table above shows the correlations between the predictor variable and the remaining variables using the best model gained from the tune() function on the SVM model. 
-```{r}
-error <- table(class_pred, x.train[,1])
-insampleerror<-sum(diag(error))/sum(error)
 
-error_r <- table(class_pred_r, x.train[,1])
-insampleerror<-sum(diag(error_r))/sum(error_r)
+From the tables printed above, the radial kernel model gave us a test error of 0.058 with the ideal gamma and cost values. The linear kernel gave an error of 0.103 which is higher than the radial. This tells us the radial kernel SVM model fit out data pretty well in comparison to linear. 
 
-```
 
 
 
