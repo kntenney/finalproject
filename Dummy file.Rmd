@@ -316,6 +316,8 @@ set.seed(1)
 tune_out_r <- tune(svm, Class ~ ., data = x.train, kernel = "radial",
                  ranges = list(cost = c(0.1, 1, 10, 100, 1000), gamma = c(0.1, 0.5, 1, 2, 3, 4)))
 summary(tune_out_r)
+bestmodr <- tune_out_r$best.model
+class_pred_r = predict(bestmodr, x.test)
 plot(tune_out_r$best.model, x)
 ```
 This gives us a gamma value of 0.1 and the cost value with the lowest cross-validation error was cost = 1. 
@@ -333,6 +335,15 @@ summary(bestmod)
 plot(bestmod, x.train)
 table(true = x.test$Class, pred = predict(tune_out_r$best.model, newdata = x.test))
 ```
-The table above shows the coorelations between the predictor variable and the remaining variables using the best model gained from the tune() function on the SVM model. 
+The table above shows the correlations between the predictor variable and the remaining variables using the best model gained from the tune() function on the SVM model. 
+```{r}
+error <- table(class_pred, x.train[,1])
+insampleerror<-sum(diag(error))/sum(error)
+
+error_r <- table(class_pred_r, x.train[,1])
+insampleerror<-sum(diag(error_r))/sum(error_r)
+
+```
+
 
 
