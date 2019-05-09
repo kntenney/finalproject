@@ -1,0 +1,348 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+The data being considered is breast cancer data processed using a metric algorithm by a lab on campus. Mammograms were processed according to the metrics (i) area, (ii) density, (iii) filament index (measures circularity of the objects in the image), (iv) component count, and (v) component distance. It should be noted that an alternative method of measuring component count was included (denoted `Mean_comp_count_alt` in the data). These values were averaged for each image to get their mean (e.g. `Mean_comp_count`). Also, per the suggestion made by Prof. Lai during our presentation, the median values were also taken (e.g. denoted `Med_comp_count`). A best model was found using logistic regression, and then more advanced classification methods were considered to see if better results were possible. The goal of the project was to find a statistical model that could best predict the presence of cancer (and thus minimize testing error) based on the image data alone.
+
+We first use logistic regression to fit the data. To begin, we see how good the predictors are in discerning between cancerous and normal breasts. We experiment with different predictors to determine which ones produce the best training error. To do this, we use the `glm()` function as follows:
+
+```{r}
+library(brglm2)
+# predict class using standard (mean) predictors
+# check separation to see if separation is a problem...
+glm_fit_mean <- glm(Class ~ Mean_comp_count + Mean_fil_ind + Mean_density + Mean_area + Mean_distance, data = df, family = binomial, method = "detect_separation")
+
+glm_fit_mean
+# no such problem detected, so we can fit a logistic model without worrying about
+# the errors from glm
+glm_fit_mean <- glm(Class ~ Mean_comp_count + Mean_fil_ind + Mean_density + Mean_area + Mean_distance, data = df, family = binomial)
+
+
+
+# predict class using median predictor values
+# again, first check for separation
+glm_fit_med <- glm(Class ~ Med_fil_ind + Med_density + Med_area + Med_distance + Med_comp_count_alt, data = df, family = binomial, method = "detect_separation")
+
+glm_fit_med
+# no separation detected, so we may continue as normal disregarding errors from glm
+glm_fit_med <- glm(Class ~ Med_fil_ind + Med_density + Med_area + Med_distance + Med_comp_count_alt, data = df, family = binomial)
+
+
+
+# predict class using Mean_comp_count_alt instead of Mean_comp_count
+# first check for separation...
+glm_fit_mean_alt <- glm(Class ~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area + Mean_density 
+                            + Mean_distance, data = df, family=binomial,
+                        method="detect_separation")
+
+glm_fit_mean_alt
+# Separation: FALSE, so we may continue as normal...
+glm_fit_mean_alt <- glm(Class ~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area + Mean_density 
+                        + Mean_distance, data = df, family=binomial)
+```
+`glm.fit` is giving us some pesky errors, but we've already confirmed this is not due to complete separation, just some influential variables. Since nothing is wrong with the data, from here forward we will suppress these warnings.
+
+As one can see, most of the parameters are statistically significant given their p-values, aside from maybe `Mean_density`, but we address this later.
+
+We can also look at the confidence intervals to determine where the parameters may reside. We do this for the last model above.
+
+```{r}
+library(base64)
+suppressWarnings(confint(glm_fit_mean_alt))
+```
+
+To look at the particular coefficients of the data, we can use the `coef()` function.
+
+```{r}
+coef(glm_fit_mean_alt)
+```
+
+And now we want to see how well it predicts whether or not a breast has cancer. Since we are currently only using the training data, this will have to suffice for our predictions - we look at testing error later. Here, a prediction of `1` is cancerous while a prediction of `0` is normal. After computing the probabilities, we set all those greater than $0.5$ to $1$. We compare the various models only using logistic regression for now.
+
+```{r}
+# compare how each model performed...
+cancer_probs_mean <- predict(glm_fit_mean, type="response")
+cancer_probs_mean[which(cancer_probs_mean > 0.5)] = 1
+cancer_probs_mean[which(cancer_probs_mean < 1)] = 0
+
+cancer_probs_med <- predict(glm_fit_med, type="response")
+cancer_probs_med[which(cancer_probs_med > 0.5)] = 1
+cancer_probs_med[which(cancer_probs_med < 1)] = 0
+
+cancer_probs_mean_alt <- predict(glm_fit_mean_alt, type="response")
+cancer_probs_mean_alt[which(cancer_probs_mean_alt > 0.5)] = 1
+cancer_probs_mean_alt[which(cancer_probs_mean_alt < 1)] = 0
+```
+
+To look at how each model performed, we can use the `table()` function to generate a confusion matrix. 
+
+```{r}
+# directly compare values...
+table(cancer_probs_mean, df$Class)
+
+table(cancer_probs_med, df$Class)
+
+table(cancer_probs_mean_alt, df$Class)
+```
+
+It seems that the final model had the best training error, so we will limit ourselves to this specific model. We can calculate the associated accuracy of the model, as well as its sensitivity and specificity.
+
+```{r}
+# the accuracy of the model...
+(53+74)/153
+# an accuracy of 83%, or an error rate of 17%
+
+# the sensitivty of the model (positively identified cancer patients)
+74/(74+12)
+# a sensitivity of 86%
+
+# the specificity of the model (positively identified cancer-free patients)
+53/(53 + 14)
+# a specificity of 79%
+```
+
+Which values are the most significant in predicting the data?
+```{r}
+summary(glm_fit_mean_alt)
+# note that the Mean_density variable has a p-value of 0.09331, so it's slightly
+# above the threshold of significant parameters... let's omit it and see how the 
+# model behaves
+glm_fit_mean_alt <- glm(Class ~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = df, family=binomial)
+
+cancer_probs_mean_alt <- predict(glm_fit_mean_alt, type="response")
+cancer_probs_mean_alt[which(cancer_probs_mean_alt > 0.5)] = 1
+cancer_probs_mean_alt[which(cancer_probs_mean_alt < 1)] = 0
+
+table(cancer_probs_mean_alt, df$Class)
+```
+The accuracy only slightly decreased - this model has a training error rate of 19.6%. Therefore, we will use this model for our analysis. 
+
+How do higher powers of the logistic regression variables fair when fitting the model? We can check as follows and plot the results.
+
+```{r}
+sensitivityVec = rep(NA, 11)
+trainingErrorVec = rep(NA, 11)
+specificityVec = rep(NA, 11)
+
+
+for (i in 1:11) {
+  suppressWarnings(glm_fit_mean_alt_poly <- glm(Class ~ poly(Mean_comp_count_alt,i) +
+                                                  poly(Mean_fil_ind,i) + 
+                poly(Mean_area,i) + poly(Mean_distance,i), data = df, family = binomial))
+  
+  
+  cancer_probs_mean_alt_poly <- predict(glm_fit_mean_alt_poly, type="response")
+  cancer_probs_mean_alt_poly[which(cancer_probs_mean_alt_poly > 0.5)] = 1
+  cancer_probs_mean_alt_poly[which(cancer_probs_mean_alt_poly < 1)] = 0
+
+  confMat <- table(cancer_probs_mean_alt_poly, df$Class)
+  
+  trainingErrorVec[i] = 1 - (sum(diag(confMat)))/sum(confMat)
+  sensitivityVec[i] = diag(confMat)[2]/sum(confMat[,2])
+  specificityVec[i] = diag(confMat)[1]/sum(confMat[,1])
+  
+  
+}
+
+plot(1:11, trainingErrorVec, type = "l", col="red",ylim = c(0, max(c(specificityVec, 
+                                                                     sensitivityVec))),
+     xlab = "Power of polynomial", ylab= " ")
+lines(1:11, sensitivityVec, type="l", col="blue")
+lines(1:11, specificityVec, type="l", col="orange")
+legend("topright", legend = c("Training Error", "Sensitivity", "Specificity"), 
+       lty = 1, col=c("red", "blue", "orange"))
+```
+As we can see, higher power polynomials do not significantly change the aforementioned probabilities. However, thus far we have only considered the training error, so let's look at the testing error using different methods of cross-validation. Below we use vanilla cross-validation to determine an estimate of the testing error for the logistic model.
+
+```{r}
+set.seed(321)
+library(boot)
+# since we know there are no complete separation errors...
+suppressWarnings(cv.err <- cv.glm(df, glm_fit_mean_alt))
+# let's look at the test error
+cv.err$delta
+```
+Our testing error approxmiation is about 0.138. Now let's implement k-fold cross-validation to see if the testing error improves (we use k=5 and k=10):
+
+```{r}
+set.seed(321)
+# 5-fold cross-validation
+suppressWarnings(cv.err_5 <- cv.glm(df, glm_fit_mean_alt, K=5))
+cv.err_5$delta
+
+# 10-fold cross-validation
+suppressWarnings(cv.err_10 <- cv.glm(df, glm_fit_mean_alt, K=10))
+cv.err_10$delta
+```
+In either case we see that our testing error remains around 0.137-0.139. What of higher polynomial powers again? We use 10-fold cross-validation and see how they compare:
+
+```{r}
+set.seed(321)
+testingErrorVec = rep(NA, 10)
+for (i in 1:10) {
+  suppressWarnings(glm_fit_mean_alt_poly <- glm(Class ~ poly(Mean_comp_count_alt,i) +
+                                                  poly(Mean_fil_ind,i) + 
+                poly(Mean_area,i) + poly(Mean_distance,i), data = df, family = binomial))
+  
+  
+  suppressWarnings(cv.err_10 <- cv.glm(df, glm_fit_mean_alt_poly, K=10))
+  testingErrorVec[i] <- cv.err_10$delta[1]
+}
+
+plot(1:10, testingErrorVec, col="red", type="l", xlab="Power of polynomial",
+     ylab="Testing Error")
+
+```
+Interestingly, the testing error increases as the power of the polynomial increases. This may be a consequence of over-fitting the data. 
+
+We now look at other classification models, in particular, we consider linear discriminant analysis, quadratic discriminant analysis, k-nearest neighbors, and support vector machines (SVM). We first consider linear discriminant analysis:
+
+```{r}
+library(MASS)
+library(modelr)
+# partition the data into training and testing sets
+set.seed(1)
+attach(df)
+# consider only those data points with Mean_comp_count_alt < 13
+train = (Mean_comp_count_alt < 13)
+df.train <- df[!train,]
+df.test <- df[train,]
+class.train <- Class[!train]
+class.test <- Class[train]
+
+# fit the model to the training set
+lda_fit <- lda(Class ~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = df, subset=train)
+
+# to visualize the fit
+# plot(lda.fit)
+
+# gather predictions for the training data
+lda_preds <- predict(lda_fit, df.train)
+# compile predictions
+lda_class <- lda_preds$class
+table(lda_class, class.train)
+# now determine training error
+1 - mean(lda_class == class.train)
+
+# now let's look at how well the model predicts the testing sample...
+lda_preds_test <- predict(lda_fit, df.test)
+
+lda_class <- lda_preds_test$class
+table(lda_class, class.test)
+
+# and the testing error...
+1 - mean(lda_class == class.test)
+```
+The linear discriminant analysis method yielded a testing error of 0.209 - slightly worse than the testing error achieved with logistic regression. The next method we consider is quadratic discriminant analysis, using the same syntax as before.
+
+```{r}
+set.seed(1)
+# fit a QDA model to the training data
+qda_fit <- qda(Class ~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = df, subset=train)
+# predict the training set
+qda_class <- predict(qda_fit, df.train)$class
+table(qda_class, class.train)
+
+# training error of model
+1 - mean(qda_class == class.train)
+
+# now to look at the testing data...
+qda_class <- predict(qda_fit, df.test)$class
+table(qda_class, class.test)
+
+# testing error of model
+1 - mean(qda_class == class.test)
+```
+
+The quadratic discriminant analysis model produced a testing error of 0.224 - worse than both the logistic regression model as well as the linear discriminant analysis model. Now, using k-nearest neighbors (KNN):
+```{r}
+library(class)
+# compile the data into matrices...
+train.X <- cbind(Mean_comp_count, Mean_fil_ind, Mean_area, Mean_distance)[train,]
+test.X <- cbind(Mean_comp_count, Mean_fil_ind, Mean_area, Mean_distance)[!train,]
+train.class <- Class[train]
+```
+
+```{r}
+set.seed(1)
+# make predictions using k=1
+knn.pred <- knn(train.X, test.X, train.class, k=1)
+# create a confusion matrix
+table(knn.pred, class.train)
+# and compute the testing error
+(33+3)/(33+49+1+3)
+
+```
+Clearly, KNN has produced the worse results so far! We examine one final model: support-vector machines (SVM). We fit an SVM model to the data set with differing kernels including linear and radial.
+
+```{r}
+library(tidyverse)
+library(e1071)
+set.seed(1)
+# partition the model
+rp <- resample_partition(df, c(train = 0.7, test = 0.3))
+x.train <- as.tibble(rp$train)
+x.test<- as.tibble(rp$test)
+# fit a linear SVM model to the data
+(svm_linear <- svm (Class~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = x.train, kernel = "linear", cost = 10, scale = FALSE))
+```
+
+Now we will use the `tune()` function to find the best `cost` and `gamma` values for the linear kernel to give the lowest cross-validation error.
+```{r}
+set.seed(1)
+# tune function to determine best cost
+tune_out <- tune(svm, Class ~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = x.train, kernel = "linear",
+                 ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 100)))
+summary(tune_out)
+# store the best model
+bestmod <- tune_out$best.model
+# store predictions
+class_pred = predict(bestmod, x.test)
+# confusion matrix
+table(predict = class_pred, truth = x.test$Class)
+```
+
+This linear kernel SVM model used with the `tune()` function gave us an optimized `cost = 0.1` as the lowest cross-validation error. Next, we consider the same using the radial kernel and tuning the best `gamma` value.
+
+```{r}
+# fit a radial SVM model to the data
+svm_radial <- svm(Class~Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = x.train, kernel = "radial", gamma = 1, cost = 1)
+
+set.seed(1)
+# determine best gamma and best cost
+tune_out_r <- tune(svm, Class ~ Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = x.train, kernel = "radial",
+                 ranges = list(cost = c(0.1, 1, 10, 100, 1000), gamma = c(0.1, 0.5, 1, 2, 3, 4)))
+summary(tune_out_r)
+bestmodr <- tune_out_r$best.model
+# store predictions
+class_pred_r = predict(bestmodr, x.test)
+plot(tune_out_r$best.model, x)
+```
+This gives us `gamma = 0.1` and the `cost` value with the lowest cross-validation error was `cost = 10`. 
+
+```{r}
+# optimized linear SVM model
+svm_lin.opt <- svm(Class~Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = x.train, kernel = "linear", gamma = 0.0, cost = 0.1,decision.values=T)
+# optimized radial SVM model
+svm_rad.opt <- svm(Class~Mean_comp_count_alt + Mean_fil_ind  + Mean_area 
+                        + Mean_distance, data = x.train, kernel = "radial", gamma = 0.1, cost = 10,decision.values=T)
+summary(svm_lin.opt)
+summary(svm_rad.opt)
+```
+
+The linear kernel optimized model gives us 99 support vectors while the similar radial kernel model gave us 88. The linear kernel gave us a smaller cost variable. This controls bias-variance trade-off so when it's smaller, it gives us a classifier that is more highly fit to the data. This gives us a lower bias. From the tables printed above, the radial kernel model gave us a test error of 0.17 with the ideal gamma and cost values. The linear kernel gave an error of 0.27 which is higher than the radial. This tells us the radial kernel SVM model fit our data pretty well in comparison to the linear SVM model. 
+
+In conclusion, the logistic regression method was the best performing model considered. One method not considered and mentioned in class was the implementation of a convolution neural network. Given the time limitations, however, we were unable to implement such a method. 
+
+
+
+
